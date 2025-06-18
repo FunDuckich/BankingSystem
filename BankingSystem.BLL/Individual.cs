@@ -8,6 +8,8 @@ namespace BankingSystem.BLL
     public class Individual : Client, IDepositor, ILoaner
     {
         public string FirstName { get; }
+        public override string DisplayName => $"{FirstName} (ID: {ClientId})";
+
         private const int DepositInterest = 22;
         private const int LoanInterest = 6;
         private bool _depositIsOpened;
@@ -27,6 +29,11 @@ namespace BankingSystem.BLL
                 throw new Exception("Депозит уже открыт!");
             }
 
+            if (amount <= 0)
+            {
+                throw new ArgumentException("Сумма депозита должна быть положительной.");
+            }
+
             Balance -= amount;
             DepositBalance += amount;
             _depositDate = Now;
@@ -41,7 +48,7 @@ namespace BankingSystem.BLL
             }
 
             Balance += DepositBalance * (decimal)(1 + DepositInterest / (IsLeapYear(Now.Year) ? 366.0 : 365.0) *
-                _depositDate.Subtract(Now).TotalDays);
+                (Now - _depositDate).TotalDays);
             DepositBalance = 0;
             _depositIsOpened = false;
         }
@@ -53,10 +60,15 @@ namespace BankingSystem.BLL
                 throw new Exception("У вас уже есть кредит!");
             }
 
+            if (amount <= 0)
+            {
+                throw new ArgumentException("Сумма кредита должна быть положительной.");
+            }
+
             decimal availableLoanAmount = Balance * 3;
             if (amount > availableLoanAmount)
             {
-                throw new Exception($"Максимально доступный размер кредита: {availableLoanAmount}");
+                throw new Exception($"Максимально доступный размер кредита: {availableLoanAmount:C}");
             }
 
             Balance += amount;
@@ -71,24 +83,26 @@ namespace BankingSystem.BLL
                 throw new Exception("Вы не должник!");
             }
 
-            LoanBalance +=
-                (decimal)(_depositDate.Subtract(Now).TotalDays * (double)LoanBalance * (LoanInterest / 100.0));
-            _depositDate = Now;
+            if (amount <= 0)
+            {
+                throw new ArgumentException("Сумма погашения должна быть положительной.");
+            }
+
             Balance -= amount;
             LoanBalance -= amount;
 
-            if (LoanBalance >= 0)
+            if (LoanBalance <= 0)
             {
-                _loanIsOpened = false;
-                Balance += LoanBalance;
+                Balance -= LoanBalance;
                 LoanBalance = 0;
+                _loanIsOpened = false;
             }
         }
 
         public override string ToString()
         {
-            StringBuilder info = new StringBuilder();
-            info.AppendLine("Физ лицо");
+            var info = new StringBuilder();
+            info.AppendLine("Физ. лицо");
             info.AppendLine($"Имя: {FirstName}");
             info.AppendLine($"ID: {ClientId}");
             info.AppendLine($"Баланс: {Balance:C}");

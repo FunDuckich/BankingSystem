@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using static System.DateTime;
 
@@ -8,14 +9,17 @@ namespace BankingSystem.BLL
     [Serializable]
     public class LegalEntity : Client, IDepositor, ILoaner
     {
-        private string NameOfOrganisation { get; }
+        public string NameOfOrganisation { get; }
+        public override string DisplayName => $"{NameOfOrganisation} (ID: {ClientId})";
+        public IReadOnlyList<Individual> Workers => _workers.AsReadOnly();
+
         private const int DepositInterest = 29;
         private const int LoanInterest = 3;
         private bool _depositIsOpened;
         private bool _loanIsOpened;
         private DateTime _depositDate;
-        private List<Individual> _workers = new List<Individual>();
-        private decimal WorkerSalary => _workers.Count > 0 ? Balance * (decimal)0.4 / _workers.Count : 0;
+        private readonly List<Individual> _workers = new List<Individual>();
+        private decimal WorkerSalary => _workers.Count > 0 ? Balance * (decimal)0.05 / _workers.Count : 0;
 
         public LegalEntity(int clientId, string nameOfOrganisation) : base(clientId)
         {
@@ -28,6 +32,11 @@ namespace BankingSystem.BLL
             if (_depositIsOpened)
             {
                 throw new Exception("Депозит уже открыт!");
+            }
+
+            if (amount <= 0)
+            {
+                throw new ArgumentException("Сумма депозита должна быть положительной.");
             }
 
             Balance -= amount;
@@ -44,7 +53,7 @@ namespace BankingSystem.BLL
             }
 
             Balance += DepositBalance * (decimal)(1 + DepositInterest / (IsLeapYear(Now.Year) ? 366.0 : 365.0) *
-                _depositDate.Subtract(Now).TotalDays);
+                (Now - _depositDate).TotalDays);
             DepositBalance = 0;
             _depositIsOpened = false;
         }
@@ -56,10 +65,15 @@ namespace BankingSystem.BLL
                 throw new Exception("У вас уже есть кредит!");
             }
 
+            if (amount <= 0)
+            {
+                throw new ArgumentException("Сумма кредита должна быть положительной.");
+            }
+
             decimal availableLoanAmount = Balance * 7;
             if (amount > availableLoanAmount)
             {
-                throw new Exception($"Максимально доступный размер кредита: {availableLoanAmount}");
+                throw new Exception($"Максимально доступный размер кредита: {availableLoanAmount:C}");
             }
 
             Balance += amount;
@@ -74,22 +88,29 @@ namespace BankingSystem.BLL
                 throw new Exception("Вы не должник!");
             }
 
-            LoanBalance +=
-                (decimal)(_depositDate.Subtract(Now).TotalDays * (double)LoanBalance * (LoanInterest / 100.0));
-            _depositDate = Now;
+            if (amount <= 0)
+            {
+                throw new ArgumentException("Сумма погашения должна быть положительной.");
+            }
+
             Balance -= amount;
             LoanBalance -= amount;
 
-            if (LoanBalance >= 0)
+            if (LoanBalance <= 0)
             {
-                _loanIsOpened = false;
-                Balance += LoanBalance;
+                Balance -= LoanBalance;
                 LoanBalance = 0;
+                _loanIsOpened = false;
             }
         }
 
         public void Hire(Individual newWorker)
         {
+            if (_workers.Any(w => w.ClientId == newWorker.ClientId))
+            {
+                throw new Exception("Этот работник уже нанят.");
+            }
+
             _workers.Add(newWorker);
         }
 
@@ -97,7 +118,13 @@ namespace BankingSystem.BLL
         {
             if (_workers.Count <= 0)
             {
-                throw new Exception("Нет работников!");
+                throw new Exception("Нет работников для выплаты зарплаты!");
+            }
+
+            decimal totalSalary = WorkerSalary * _workers.Count;
+            if (Balance < totalSalary)
+            {
+                throw new Exception("Недостаточно средств на балансе для выплаты зарплаты.");
             }
 
             foreach (Individual worker in _workers)
@@ -110,25 +137,13 @@ namespace BankingSystem.BLL
         private string GetWorkersNames()
         {
             if (_workers.Count == 0) return "Нет";
-
-            StringBuilder names = new StringBuilder();
-            foreach (Individual worker in _workers)
-            {
-                if (names.Length > 0)
-                {
-                    names.Append(", ");
-                }
-
-                names.Append(worker.FirstName);
-            }
-
-            return names.ToString();
+            return string.Join(", ", _workers.Select(w => w.FirstName));
         }
 
         public override string ToString()
         {
-            StringBuilder info = new StringBuilder();
-            info.AppendLine("Юр лицо");
+            var info = new StringBuilder();
+            info.AppendLine("Юр. лицо");
             info.AppendLine($"Наименование: {NameOfOrganisation}");
             info.AppendLine($"ID: {ClientId}");
             info.AppendLine($"Баланс: {Balance:C}");

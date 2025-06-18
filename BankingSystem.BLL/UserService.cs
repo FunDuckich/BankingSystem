@@ -7,15 +7,34 @@ namespace BankingSystem.BLL
     public class UserService
     {
         private readonly DataAccess _dataAccess;
-        private readonly List<User> _users;
+        private List<User> _users;
 
         public UserService(DataAccess dataAccess)
         {
             _dataAccess = dataAccess;
             _users = _dataAccess.LoadUsers().Cast<User>().ToList();
+
+            EnsureAdminExists();
         }
 
-        public bool Register(string username, string password, out string errorMessage)
+        private void EnsureAdminExists()
+        {
+            if (!_users.Any(u => u.Role == UserRole.Admin))
+            {
+                var adminPasswordHash = PasswordHasher.Hash("admin");
+                _users.Add(new User("admin", adminPasswordHash, UserRole.Admin));
+                SaveChanges();
+            }
+        }
+
+        public User Login(string username, string password)
+        {
+            var passwordHash = PasswordHasher.Hash(password);
+            return _users.FirstOrDefault(u =>
+                u.Username.ToLower() == username.ToLower() && u.PasswordHash == passwordHash);
+        }
+
+        public bool CreateUserForClient(string username, string password, int clientId, out string errorMessage)
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             {
@@ -29,24 +48,21 @@ namespace BankingSystem.BLL
                 return false;
             }
 
-            string passwordHash = PasswordHasher.Hash(password);
-            _users.Add(new User(username, passwordHash));
-            _dataAccess.SaveUsers(_users.Cast<object>().ToList());
+            var passwordHash = PasswordHasher.Hash(password);
+            _users.Add(new User(username, passwordHash, UserRole.Client, clientId));
 
             errorMessage = string.Empty;
             return true;
         }
 
-        public bool Login(string username, string password)
+        public void DeleteUserByClientId(int clientId)
         {
-            var user = _users.FirstOrDefault(u => u.Username.ToLower() == username.ToLower());
-            if (user == null)
-            {
-                return false;
-            }
+            _users.RemoveAll(u => u.ClientId == clientId);
+        }
 
-            string passwordHash = PasswordHasher.Hash(password);
-            return user.PasswordHash == passwordHash;
+        public void SaveChanges()
+        {
+            _dataAccess.SaveUsers(_users.Cast<object>().ToList());
         }
     }
 }

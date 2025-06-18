@@ -6,6 +6,8 @@ namespace BankingSystem.BLL
     public abstract class Client : IComparable<Client>
     {
         public int ClientId { get; protected set; }
+        public abstract string DisplayName { get; }
+
         private decimal _balance;
         private decimal _depositBalance;
 
@@ -49,11 +51,21 @@ namespace BankingSystem.BLL
 
         public void TopUp(decimal amount)
         {
+            if (amount <= 0)
+            {
+                throw new ArgumentException("Сумма пополнения должна быть положительной.");
+            }
+
             Balance += amount;
         }
 
         public void Withdraw(decimal amount)
         {
+            if (amount <= 0)
+            {
+                throw new ArgumentException("Сумма для снятия должна быть положительной.");
+            }
+
             Balance -= amount;
         }
 
